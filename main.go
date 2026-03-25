@@ -1,25 +1,26 @@
 package main
 
 import (
-	"image/color"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
 )
 
-var alphabet = [26]string{
-	"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O",
-	"P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
-}
+var (
+	alphabet = [26]string{
+		"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O",
+		"P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+	}
+	ciphertext = binding.NewString()
+)
 
 func NewInputScreen(moveToMainScreen func()) *fyne.Container {
 	title := widget.NewLabel("Simple Substitution Cipher")
 	title.Alignment = fyne.TextAlignCenter
 
-	input := widget.NewEntry()
+	input := widget.NewEntryWithData(ciphertext)
 	input.SetPlaceHolder("Enter ciphertext...")
 	input.MultiLine = true
 
@@ -42,7 +43,7 @@ func NewMainScreen() *fyne.Container {
 	}
 	alphabetVScroll := container.NewVScroll(alphabetVStack)
 
-	text := canvas.NewText("hello, world!", color.Black)
+	text := widget.NewLabelWithData(ciphertext)
 	text.Alignment = fyne.TextAlignCenter
 
 	return container.NewBorder(title, nil, alphabetVScroll, nil, text)
