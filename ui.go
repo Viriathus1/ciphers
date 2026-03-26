@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -14,7 +13,7 @@ import (
 )
 
 var (
-	alphabet   = "abcdefghijklmnopqrstuvwxyz"
+	alphabet   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	keyMap     = make(map[rune]rune)
 	ciphertext = binding.NewString()
 	plaintext  = binding.NewString()
@@ -35,7 +34,6 @@ func NewInputScreen(moveToMainScreen func()) *fyne.Container {
 		}
 		for i := 0; i < len(s); i++ {
 			if s[i] >= 128 {
-				fmt.Println(string(s[i]), i)
 				return errors.New("invalid ascii string")
 			}
 		}
@@ -73,7 +71,7 @@ func NewMainScreen() *fyne.Container {
 			if firstRune == utf8.RuneError {
 				keyMap[letter] = letter
 			} else {
-				keyMap[letter] = unicode.ToUpper(firstRune)
+				keyMap[letter] = unicode.ToLower(firstRune)
 			}
 			text, _ := ciphertext.Get()
 			var builder strings.Builder
@@ -96,6 +94,7 @@ func NewMainScreen() *fyne.Container {
 
 	text := widget.NewLabelWithData(plaintext)
 	text.Alignment = fyne.TextAlignCenter
+	text.Wrapping = fyne.TextWrapBreak
 
 	return container.NewBorder(title, nil, alphabetVScroll, nil, text)
 }
@@ -105,7 +104,7 @@ func mainScreenInit() {
 		keyMap[char] = char
 	}
 	ciphertextContent, _ := ciphertext.Get()
-	loweredText := strings.ToLower(ciphertextContent)
+	loweredText := strings.ToUpper(ciphertextContent)
 	ciphertext.Set(loweredText)
 	plaintext.Set(loweredText)
 }
