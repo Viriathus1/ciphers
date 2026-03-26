@@ -13,6 +13,6 @@ func main() {
 		w.SetContent(NewMainScreen())
 	})
 	w.SetContent(inputScreen)
-	w.Resize(fyne.NewSize(750, 500))
+	w.Resize(fyne.NewSize(750, 300))
 	w.ShowAndRun()
 }

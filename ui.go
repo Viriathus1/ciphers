@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -24,10 +26,36 @@ func NewInputScreen(moveToMainScreen func()) *fyne.Container {
 	input := widget.NewEntryWithData(ciphertext)
 	input.SetPlaceHolder("Enter ciphertext...")
 	input.MultiLine = true
+	input.Validator = func(s string) error {
+		if len(s) == 0 {
+			return errors.New("ciphertext is too small")
+		} else if len(s) > 1000 {
+			return errors.New("ciphertext is too BIG")
+		}
+		for i := 0; i < len(s); i++ {
+			if s[i] >= 128 {
+				fmt.Println(string(s[i]), i)
+				return errors.New("invalid ascii string")
+			}
+		}
+		return nil
+	}
+	input.AlwaysShowValidationError = true
+	input.Wrapping = fyne.TextWrapBreak
+	input.SetMinRowsVisible(10)
 
-	saveButton := widget.NewButton("Save", moveToMainScreen)
+	form := &widget.Form{
+		OnSubmit: func() {
+			if err := input.Validate(); err == nil {
+				moveToMainScreen()
+			}
+		},
+		SubmitText:  "Save",
+		Orientation: 1,
+	}
+	form.Append("Simple Subtitution Cipher", input)
 
-	return container.NewBorder(title, saveButton, nil, nil, input)
+	return container.NewStack(form)
 }
 
 func NewMainScreen() *fyne.Container {
