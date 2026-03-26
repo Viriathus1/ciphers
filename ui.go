@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"fyne.io/fyne/v2"
@@ -72,13 +73,16 @@ func NewMainScreen() *fyne.Container {
 			if firstRune == utf8.RuneError {
 				keyMap[letter] = letter
 			} else {
-				keyMap[letter] = firstRune
+				keyMap[letter] = unicode.ToUpper(firstRune)
 			}
 			text, _ := ciphertext.Get()
 			var builder strings.Builder
 			for _, char := range text {
-				// need to check for spaces, punction etc.
-				builder.WriteRune(keyMap[char])
+				if val, ok := keyMap[char]; ok {
+					builder.WriteRune(val)
+				} else {
+					builder.WriteRune(char)
+				}
 			}
 			plaintext.Set(builder.String())
 		}
