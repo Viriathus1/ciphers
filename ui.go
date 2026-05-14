@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -12,33 +13,55 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-var (
-	alphabet   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	keyMap     = make(map[rune]rune)
-	ciphertext = binding.NewString()
-	plaintext  = binding.NewString()
-)
+func ShowCipherSelection(w fyne.Window) {
+	var popup *widget.PopUp
 
-func NewInputScreen(moveToMainScreen func()) *fyne.Container {
-	title := widget.NewLabel("Simple Substitution Cipher")
+	openSubstitution := func() {
+		popup.Hide()
+		w.SetContent(NewInputScreen("Simple Substitution Cipher", func() {
+			ShowCipherSelection(w)
+		}, func(ciphertext binding.String) {
+			w.SetContent(NewSubstitutionScreen(ciphertext, func() {
+				ShowCipherSelection(w)
+			}))
+		}))
+	}
+
+	openCaesar := func() {
+		popup.Hide()
+		w.SetContent(NewInputScreen("Caesar Cipher", func() {
+			ShowCipherSelection(w)
+		}, func(ciphertext binding.String) {
+			w.SetContent(NewCaesarScreen(ciphertext, func() {
+				ShowCipherSelection(w)
+			}))
+		}))
+	}
+
+	title := widget.NewLabel("Choose a cipher")
+	title.Alignment = fyne.TextAlignCenter
+
+	content := container.NewPadded(container.NewVBox(
+		title,
+		widget.NewButton("Simple Substitution Cipher", openSubstitution),
+		widget.NewButton("Caesar Cipher", openCaesar),
+	))
+
+	popup = widget.NewModalPopUp(content, w.Canvas())
+	popup.Resize(fyne.NewSize(320, 160))
+	popup.Show()
+}
+
+func NewInputScreen(titleText string, onBack func(), onSubmit func(binding.String)) fyne.CanvasObject {
+	ciphertext := binding.NewString()
+
+	title := widget.NewLabel(titleText)
 	title.Alignment = fyne.TextAlignCenter
 
 	input := widget.NewEntryWithData(ciphertext)
 	input.SetPlaceHolder("Enter ciphertext...")
 	input.MultiLine = true
-	input.Validator = func(s string) error {
-		if len(s) == 0 {
-			return errors.New("ciphertext is too small")
-		} else if len(s) > 1000 {
-			return errors.New("ciphertext is too BIG")
-		}
-		for i := 0; i < len(s); i++ {
-			if s[i] >= 128 {
-				return errors.New("invalid ascii string")
-			}
-		}
-		return nil
-	}
+	input.Validator = validateCiphertext
 	input.AlwaysShowValidationError = true
 	input.Wrapping = fyne.TextWrapBreak
 	input.SetMinRowsVisible(10)
@@ -46,19 +69,36 @@ func NewInputScreen(moveToMainScreen func()) *fyne.Container {
 	form := &widget.Form{
 		OnSubmit: func() {
 			if err := input.Validate(); err == nil {
-				moveToMainScreen()
+				onSubmit(ciphertext)
 			}
 		},
-		SubmitText:  "Save",
-		Orientation: 1,
+		SubmitText: "Continue",
 	}
-	form.Append("Simple Subtitution Cipher", input)
+	form.Append("Ciphertext", input)
 
-	return container.NewStack(form)
+	return container.NewBorder(
+		container.NewVBox(widget.NewButton("Change Cipher", onBack), title),
+		nil,
+		nil,
+		nil,
+		form,
+	)
 }
 
-func NewMainScreen() *fyne.Container {
-	mainScreenInit()
+func NewSubstitutionScreen(ciphertext binding.String, onBack func()) fyne.CanvasObject {
+	normalizedText := normalizeCiphertext(ciphertext)
+	plaintext := binding.NewString()
+
+	for _, char := range alphabet {
+		keymap[char] = char
+	}
+
+	updatePreview := func() {
+		text, _ := ciphertext.Get()
+		plaintext.Set(decryptSubstitution(text, keymap))
+	}
+
+	updatePreview()
 
 	title := widget.NewLabel("Simple Substitution Cipher")
 	title.Alignment = fyne.TextAlignCenter
@@ -66,23 +106,24 @@ func NewMainScreen() *fyne.Container {
 	alphabetVStack := container.NewVBox()
 	for _, letter := range alphabet {
 		letterField := widget.NewEntry()
+		letterField.SetPlaceHolder(strings.ToLower(string(letter)))
 		letterField.OnChanged = func(s string) {
 			firstRune, _ := utf8.DecodeRuneInString(s)
 			if firstRune == utf8.RuneError {
-				keyMap[letter] = letter
-			} else {
-				keyMap[letter] = unicode.ToLower(firstRune)
+				keymap[letter] = letter
+				updatePreview()
+				return
 			}
-			text, _ := ciphertext.Get()
-			var builder strings.Builder
-			for _, char := range text {
-				if val, ok := keyMap[char]; ok {
-					builder.WriteRune(val)
-				} else {
-					builder.WriteRune(char)
-				}
+
+			normalizedRune := unicode.ToLower(firstRune)
+			normalizedText := string(normalizedRune)
+			if s != normalizedText {
+				letterField.SetText(normalizedText)
+				return
 			}
-			plaintext.Set(builder.String())
+
+			keymap[letter] = normalizedRune
+			updatePreview()
 		}
 		alphabetVStack.Add(container.NewBorder(nil, nil, widget.NewLabel(string(letter)),
 			container.NewHBox(letterField, container.NewGridWrap(fyne.Size{
@@ -92,19 +133,92 @@ func NewMainScreen() *fyne.Container {
 	}
 	alphabetVScroll := container.NewVScroll(alphabetVStack)
 
+	plaintext.Set(normalizedText)
 	text := widget.NewLabelWithData(plaintext)
 	text.Alignment = fyne.TextAlignCenter
 	text.Wrapping = fyne.TextWrapBreak
 
-	return container.NewBorder(title, nil, alphabetVScroll, nil, text)
+	return container.NewBorder(
+		container.NewVBox(widget.NewButton("Change Cipher", onBack), title),
+		nil,
+		alphabetVScroll,
+		nil,
+		text,
+	)
 }
 
-func mainScreenInit() {
-	for _, char := range alphabet {
-		keyMap[char] = char
+func NewCaesarScreen(ciphertext binding.String, onBack func()) fyne.CanvasObject {
+	normalizedText := normalizeCiphertext(ciphertext)
+	plaintext := binding.NewString()
+
+	shiftLabel := widget.NewLabel("Shift: 0")
+	shiftLabel.Alignment = fyne.TextAlignCenter
+
+	updatePreview := func(shift int) {
+		plaintext.Set(decryptCaesar(normalizedText, shift))
+		shiftLabel.SetText(fmt.Sprintf("Shift: %d", shift))
 	}
+
+	updatePreview(0)
+
+	title := widget.NewLabel("Caesar Cipher")
+	title.Alignment = fyne.TextAlignCenter
+
+	slider := widget.NewSlider(0, 25)
+	slider.Step = 1
+	slider.OnChanged = func(value float64) {
+		updatePreview(int(value))
+	}
+
+	ciphertextTitle := widget.NewLabel("Ciphertext")
+	ciphertextTitle.Alignment = fyne.TextAlignCenter
+
+	ciphertextLabel := widget.NewLabel(normalizedText)
+	ciphertextLabel.Alignment = fyne.TextAlignCenter
+	ciphertextLabel.Wrapping = fyne.TextWrapBreak
+
+	plaintextTitle := widget.NewLabel("Plaintext")
+	plaintextTitle.Alignment = fyne.TextAlignCenter
+
+	plaintextLabel := widget.NewLabelWithData(plaintext)
+	plaintextLabel.Alignment = fyne.TextAlignCenter
+	plaintextLabel.Wrapping = fyne.TextWrapBreak
+
+	return container.NewBorder(
+		container.NewVBox(widget.NewButton("Change Cipher", onBack), title),
+		nil,
+		nil,
+		nil,
+		container.NewVBox(
+			shiftLabel,
+			slider,
+			ciphertextTitle,
+			ciphertextLabel,
+			plaintextTitle,
+			plaintextLabel,
+		),
+	)
+}
+
+func validateCiphertext(s string) error {
+	if len(s) == 0 {
+		return errors.New("ciphertext is too small")
+	}
+	if len(s) > 1000 {
+		return errors.New("ciphertext is too BIG")
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 128 {
+			return errors.New("invalid ascii string")
+		}
+	}
+
+	return nil
+}
+
+func normalizeCiphertext(ciphertext binding.String) string {
 	ciphertextContent, _ := ciphertext.Get()
-	loweredText := strings.ToUpper(ciphertextContent)
-	ciphertext.Set(loweredText)
-	plaintext.Set(loweredText)
+	normalizedText := strings.ToUpper(ciphertextContent)
+	ciphertext.Set(normalizedText)
+	return normalizedText
 }
